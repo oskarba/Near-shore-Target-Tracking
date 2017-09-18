@@ -12,6 +12,8 @@ R = r*eye(2);
 G = [dt^2/2; dt];
 Q = q*[G*G', zeros(2); zeros(2), G*G'];
 K = length(time);
+gamma_g = 10;                         % Gate threshold
+c = 2;                                % Normalization constant
 % Empty state and covariance vectors
 x_true = zeros(4,K);
 x_est_prior = zeros(4,K);
@@ -19,6 +21,9 @@ x_est_posterior = zeros(4,K);
 cov_prior = zeros(4,4,K);
 cov_posterior = zeros(4,4,K);
 z = zeros(2, K);
+
+%Temp
+NIS = zeros(1,K);
 %-----------------------------------------------
 % Main loop
 for k = 1:K
@@ -38,8 +43,19 @@ for k = 1:K
 	% Measurement update
 	S = H*cov_prior(:,:,k)*H'+R;              % Covariance of the innovation
 	W = cov_prior(:,:,k)*H'/S;                % Gain
-    v = z(:,k)-H*x_est_prior(:,k);            % Innovation
-	x_est_posterior(:,k) = x_est_prior(:,k)+W*v;
+    v_ik = z(:,k)-H*x_est_prior(:,k);            % Measurement innovation
+    
+    NIS(k) = v_ik'/S*v_ik;
+    
+    %if NIS(k) < gamma_g:       % Measurements within validation region
+    beta_ik = (1/c)*exp(-0.5*NIS(k));
+    v_k = beta_ik*v_ik;           % For loop here
+    P_c = cov_prior(:,:,k)-W*S*W';
+    part_result = beta_ik*(v_ik*v_ik')-v_k*v_k';  % For loop here
+    SOI = W*(part_result)*W';
+    
+    %end
+	x_est_posterior(:,k) = x_est_prior(:,k)+W*v_k;
 	cov_posterior(:,:,k) = cov_prior(:,:,k)-W*S*W';
 end
 
@@ -62,3 +78,4 @@ plot(time, x_true(4,:), 'k');
 plot(time, x_est_posterior(4,:));
 plot(time, x_est_prior(4,:));
 title('East velocity');
+figure; plot(time,NIS)

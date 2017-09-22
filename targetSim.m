@@ -1,23 +1,35 @@
+clear all;
+
+% Initialized target
 x0 = [-300; 4; -200; 5];
 cov0 = diag([10, 0.5, 10, 0.5]);
 x0_est = x0+chol(cov0)*randn(4,1);
+
+% Time for simulation
 dt = 1;
 t_end = 50;
-q = 0.25;                          % Process noise strength squared
-r = 50;
 time = 1:dt:t_end;
+
+% Area of simulation
+x_lim = [-1000 1000];
+y_lim = [-1000 1000];
+V = (x_lim(2) - x_lim(1))*(y_lim(2) - y_lim(1));     % Area (m^2)
+
+% Kalman filter stuff
+q = 0.25;                       % Process noise strength squared
+r = 50;
 F = [1, dt, 0, 0; 0, 1, 0, 0; 0, 0, 1, dt; 0, 0, 0, 1];
 H = [1, 0, 0, 0; 0, 0, 1, 0];
 R = r*eye(2);
 G = [dt^2/2; dt];
 Q = q*[G*G', zeros(2); zeros(2), G*G'];
 K = length(time);
-gamma_g = 6;                         % Gate threshold
-c = 2;                                % Normalization constant
+gamma_g = 9.21;                 % Gate threshold
+c = 2;                          % Normalization constant
 
 %PDA constants
-PG = 0.865;
-PD = 0.95;
+PG = 0.99;
+PD = 0.9;
 
 % Empty state and covariance vectors
 x_true = zeros(4,K);
@@ -25,11 +37,13 @@ x_est_prior = zeros(4,K);
 x_est_posterior = zeros(4,K);
 cov_prior = zeros(4,4,K);
 cov_posterior = zeros(4,4,K);
-z_true = zeros(2, K);
 
-z_gate = zeros(2, 10*K);
+% Measurement vectors
+z_true = zeros(2, K);
+z_gate = zeros(2, 10*K);           % Inne i loop? Variabel størrelse
 z_count = 1;
-%-----------------------------------------------
+
+% -----------------------------------------------
 % Main loop
 for k = 1:K
 	% Dynamic model
@@ -41,15 +55,20 @@ for k = 1:K
 		x_true(:,k) = F*x_true(:,k-1);
 		x_est_prior(:,k) = F*x_est_posterior(:,k-1);
 		cov_prior(:,:,k) = F*cov_posterior(:,:,k-1)*F'+Q;
-	end
-	% Generate measurement
+    end
+    
+	% Generate measurement for real target
 	noise = chol(R)*randn(2,1);
 	z(:,k) = H*x_true(:,k)+noise;
+    
     % Add clutter measurements
-    clut_r = 50;        % Clutter radius
-    clut_num = 3;     % Number of clutter points
+    lambda = 0.0001;          % Clutter density
+    
+    clut_r = 50;              % Clutter radius
+    clut_num = 5;             % Number of clutter points
     z_all = [z(1,k) randi([x_true(1,k)-clut_r x_true(1,k)+clut_r],1,clut_num);
         z(2,k) randi([x_true(3,k)-clut_r x_true(3,k)+clut_r],1,clut_num)];
+    
 	% Find measurements within validation region
     S = H*cov_prior(:,:,k)*H'+R;             % Covariance of the innovation
     W = cov_prior(:,:,k)*H'/S;               % Gain

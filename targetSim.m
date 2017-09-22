@@ -43,6 +43,10 @@ z_true = zeros(2, K);
 z_gate = zeros(2, 10*K);           % Inne i loop? Variabel størrelse
 z_count = 1;
 
+% Structs
+z_strength = struct('x', {});
+z_k_gate = struct('x', {});
+
 % -----------------------------------------------
 % Main loop
 for k = 1:K
@@ -61,32 +65,51 @@ for k = 1:K
 	noise = chol(R)*randn(2,1);
 	z(:,k) = H*x_true(:,k)+noise;
     
-    % Add clutter measurements
-    lambda = 0.0001;          % Clutter density
+    % Add clutter measurements and signal strength
+    clut_h = 0.001;
+    clut_l = 0.00001;
+    lambda = clut_l + (clut_h - clut_l)*rand();     % Clutter density
+    num_clut = int16(lambda*V);                % Number of clutter points
+    z_all = [z(1,k) randi([x_lim(1) x_lim(2)],1,num_clut);
+        z(2,k) randi([y_lim(1) y_lim(2)],1,num_clut);
+        rand() rand(1,num_clut)];
     
-    clut_r = 50;              % Clutter radius
-    clut_num = 5;             % Number of clutter points
-    z_all = [z(1,k) randi([x_true(1,k)-clut_r x_true(1,k)+clut_r],1,clut_num);
-        z(2,k) randi([x_true(3,k)-clut_r x_true(3,k)+clut_r],1,clut_num)];
+    % Test signal strength
+    z_strength = [];
+    j = 1;
+    for i = 1:length(z_all(1,:))
+        if (z_all(3,i) < PD)
+            z_strength(j).x = [z_all(1,i); z_all(2,i)];
+            j = j + 1;
+        end
+    end
     
 	% Find measurements within validation region
     S = H*cov_prior(:,:,k)*H'+R;             % Covariance of the innovation
-    W = cov_prior(:,:,k)*H'/S;               % Gain
-    v_k = zeros(2,1);
-    for i = 1:clut_num+1
-        v_ik = z_all(:,i)-H*x_est_prior(:,k);            % Measurement innovation
+    m_k = 0;
+    z_k_gate = [];
+    beta_i = [0];
+    v_i = [0; 0];
+    for i = 1:length(z_strength)
+        v_ik = z_strength(i).x - H*x_est_prior(:,k);            % Measurement innovation
         NIS_temp = v_ik'/S*v_ik;
         if NIS_temp < gamma_g          % Within validation region
-            z_gate(:,z_count) = z_all(:,i);
+            z_gate(:,z_count) = z_strength(i).x;
             z_count = z_count + 1;
-            beta_ik = (1/c)*exp(-0.5*NIS_temp);
-            v_k = v_k + beta_ik*v_ik;
+            
+            v_i = [v_i v_ik];
+            beta_i = [beta_i exp(-0.5*NIS_temp)];
+            m_k = m_k + 1;
         end
     end
-    m_k = 1;                % Hva er m_k?
-    if v_k == [0; 0]
-        beta_ik = (2/c)*(1-PD*PG)*m_k/(gamma_g);
-        v_k = v_k + beta_ik*v_ik;
+    beta_i(1) = 2*(1-PD*PG)*m_k/(gamma_g);
+    beta_i = beta_i/sum(beta_i);            % Normalize
+    
+    if m_k ~= 0
+        v_k = [dot(v_i(1,:), beta_i);
+            dot(v_i(2,:), beta_i)];
+    else
+        v_k = [0; 0];
     end
     
     % Må få inn dette! -------------- endrer cov_posterior
@@ -96,6 +119,7 @@ for k = 1:K
     % -------------------------------
     
     %end
+    W = cov_prior(:,:,k)*H'/S;               % Gain
 	x_est_posterior(:,k) = x_est_prior(:,k)+W*v_k;
 	cov_posterior(:,:,k) = cov_prior(:,:,k)-W*S*W';
 end

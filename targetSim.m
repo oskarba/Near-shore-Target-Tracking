@@ -6,13 +6,14 @@ cov0 = diag([10, 0.5, 10, 0.5]);
 x0_est = x0+chol(cov0)*randn(4,1);
 
 % Time for simulation
+global dt;
 dt = 1;
-t_end = 50;
+t_end = 300;
 time = 1:dt:t_end;
 
 % Area of simulation
-x_lim = [-1000 1000];
-y_lim = [-1000 1000];
+x_lim = [-2500 2500];
+y_lim = [-2500 2500];
 V = (x_lim(2) - x_lim(1))*(y_lim(2) - y_lim(1));     % Area (m^2)
 
 % Kalman filter stuff
@@ -40,13 +41,10 @@ cov_posterior = zeros(4,4,K);
 
 % Measurement vectors
 z_true = zeros(2, K);
-z_gate = zeros(2, 10*K);           % Inne i loop? Variabel størrelse
-z_count = 1;
+z_gate = [];           % Inne i loop? Variabel størrelse
 
 % Structs
 z_strength = struct('x', {});
-z_k_gate = struct('x', {});
-nr_gate = 1;
 
 % -----------------------------------------------
 % Main loop
@@ -58,6 +56,9 @@ for k = 1:K
 		cov_prior(:,:,k) = cov0;
 	else
 		x_true(:,k) = F*x_true(:,k-1);
+        %if mod(K,3)==0
+            x_true(:,k) = randomize_speed(x_true(:,k));
+        %end
 		x_est_prior(:,k) = F*x_est_posterior(:,k-1);
 		cov_prior(:,:,k) = F*cov_posterior(:,:,k-1)*F'+Q;
     end
@@ -89,17 +90,13 @@ for k = 1:K
     S = H*cov_prior(:,:,k)*H'+R;             % Covariance of the innovation
     W = cov_prior(:,:,k)*H'/S;               % Gain
     m_k = 0;
-    z_k_gate = [];
     beta_i = [0];
     v_i = [0; 0];
     for i = 1:length(z_strength)
         v_ik = z_strength(i).x - H*x_est_prior(:,k);            % Measurement innovation
         NIS_temp = v_ik'/S*v_ik;
         if NIS_temp < gamma_g          % Within validation region
-            %z_gate(:,z_count) = z_strength(i).x;
-            z_k_gate(length(z_k_gate)+1).x = z_strength(i).x;
-            z_count = z_count + 1;
-            
+            z_gate = [z_gate z_strength(i).x];
             v_i = [v_i v_ik];
             beta_i = [beta_i exp(-0.5*NIS_temp)];
             m_k = m_k + 1;
@@ -111,8 +108,8 @@ for k = 1:K
     end
     
     if m_k ~= 0
-        v_k = [dot(v_i(1,:), beta_i);
-            dot(v_i(2,:), beta_i)];
+        v_k = [dot(v_i(1,2:end), beta_i(2:end));
+            dot(v_i(2,2:end), beta_i(2:end))];
     else
         v_k = [0; 0];
     end
@@ -124,11 +121,11 @@ for k = 1:K
         part_result = part_result + beta_i(i)*(v_i(:,i)*v_i(:,i)');
     end
     part_result = part_result - v_k*v_k';
-    SOI = W*(part_result)*W';
+    SOI = W*part_result*W';
 
 	x_est_posterior(:,k) = x_est_prior(:,k)+W*v_k;
-    %cov_posterior(:,:,k) = beta_i(1)*cov_prior(:,:,k)-(1-beta_i(1))*P_c+SOI;
-	cov_posterior(:,:,k) = cov_prior(:,:,k)-W*S*W';
+    cov_posterior(:,:,k) = beta_i(1)*cov_prior(:,:,k)+(1-beta_i(1))*P_c+SOI;
+	%cov_posterior(:,:,k) = cov_prior(:,:,k)-W*S*W';
 end
 
 %--------------------------------------------------
@@ -139,8 +136,8 @@ plot(x_est_posterior(3,:), x_est_posterior(1,:))
 plot(x_est_prior(3,:), x_est_prior(1,:))
 legend('True', 'posterior', 'prior');
 plot(z(2,:), z(1,:), 'o');
-plot(z_k_gate.x(2), z_k_gate.x(1), 'x');
-%plot(z_gate(2,1:z_count-1), z_gate(1,1:z_count-1), 'x');
+plot(z_gate(2,:), z_gate(1,:), 'x');
+%plot(z_all(2,:), z_all(1,:), '+');     % Clutter on last step
 title('North-east position plot');
 figure; subplot(2,1,1); hold on;
 plot(time, x_true(2,:), 'k');

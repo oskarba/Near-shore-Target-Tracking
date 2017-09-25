@@ -46,6 +46,7 @@ z_count = 1;
 % Structs
 z_strength = struct('x', {});
 z_k_gate = struct('x', {});
+nr_gate = 1;
 
 % -----------------------------------------------
 % Main loop
@@ -86,6 +87,7 @@ for k = 1:K
     
 	% Find measurements within validation region
     S = H*cov_prior(:,:,k)*H'+R;             % Covariance of the innovation
+    W = cov_prior(:,:,k)*H'/S;               % Gain
     m_k = 0;
     z_k_gate = [];
     beta_i = [0];
@@ -94,7 +96,8 @@ for k = 1:K
         v_ik = z_strength(i).x - H*x_est_prior(:,k);            % Measurement innovation
         NIS_temp = v_ik'/S*v_ik;
         if NIS_temp < gamma_g          % Within validation region
-            z_gate(:,z_count) = z_strength(i).x;
+            %z_gate(:,z_count) = z_strength(i).x;
+            z_k_gate(length(z_k_gate)+1).x = z_strength(i).x;
             z_count = z_count + 1;
             
             v_i = [v_i v_ik];
@@ -103,7 +106,9 @@ for k = 1:K
         end
     end
     beta_i(1) = 2*(1-PD*PG)*m_k/(gamma_g);
-    beta_i = beta_i/sum(beta_i);            % Normalize
+    if beta_i ~= 0
+        beta_i = beta_i/sum(beta_i);            % Normalize
+    end
     
     if m_k ~= 0
         v_k = [dot(v_i(1,:), beta_i);
@@ -112,15 +117,17 @@ for k = 1:K
         v_k = [0; 0];
     end
     
-    % Må få inn dette! -------------- endrer cov_posterior
-    %P_c = cov_prior(:,:,k)-W*S*W';
-    %part_result = beta_ik*(v_ik*v_ik')-v_k*v_k';  % For loop here
-    %SOI = W*(part_result)*W';
-    % -------------------------------
-    
-    %end
-    W = cov_prior(:,:,k)*H'/S;               % Gain
+    % Covariance of correct measurement and SOI
+    P_c = cov_prior(:,:,k)-W*S*W';
+    part_result = 0;
+    for i = 2:length(beta_i)
+        part_result = part_result + beta_i(i)*(v_i(:,i)*v_i(:,i)');
+    end
+    part_result = part_result - v_k*v_k';
+    SOI = W*(part_result)*W';
+
 	x_est_posterior(:,k) = x_est_prior(:,k)+W*v_k;
+    %cov_posterior(:,:,k) = beta_i(1)*cov_prior(:,:,k)-(1-beta_i(1))*P_c+SOI;
 	cov_posterior(:,:,k) = cov_prior(:,:,k)-W*S*W';
 end
 
@@ -132,7 +139,8 @@ plot(x_est_posterior(3,:), x_est_posterior(1,:))
 plot(x_est_prior(3,:), x_est_prior(1,:))
 legend('True', 'posterior', 'prior');
 plot(z(2,:), z(1,:), 'o');
-plot(z_gate(2,1:z_count-1), z_gate(1,1:z_count-1), 'x');
+plot(z_k_gate.x(2), z_k_gate.x(1), 'x');
+%plot(z_gate(2,1:z_count-1), z_gate(1,1:z_count-1), 'x');
 title('North-east position plot');
 figure; subplot(2,1,1); hold on;
 plot(time, x_true(2,:), 'k');

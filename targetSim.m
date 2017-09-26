@@ -1,4 +1,5 @@
 clear all;
+%opengl('save', 'software')
 
 % Global constants
 global dt;
@@ -18,8 +19,8 @@ t_end = 300;
 time = 1:dt:t_end;
 
 % Area of simulation
-x_lim = [-2500 2500];
-y_lim = [-2500 2500];
+x_lim = [-2000 2000];
+y_lim = [-2000 2000];
 V = (x_lim(2) - x_lim(1))*(y_lim(2) - y_lim(1));     % Area (m^2)
 
 % Kalman filter stuff
@@ -47,7 +48,7 @@ cov_posterior = zeros(4,4,K);
 
 % Measurement vectors
 z_true = zeros(2, K);
-z_gate = [];           % Inne i loop? Variabel størrelse
+z_gate = [];
 
 % Structs
 z_strength = struct('x', {});
@@ -62,9 +63,7 @@ for k = 1:K
 		cov_prior(:,:,k) = cov0;
 	else
 		x_true(:,k) = F*x_true(:,k-1);
-        %if mod(K,3)==0
-            x_true(:,k) = randomize_direction(x_true(:,k));
-        %end
+        x_true(:,k) = randomize_direction(x_true(:,k));
 		x_est_prior(:,k) = F*x_est_posterior(:,k-1);
 		cov_prior(:,:,k) = F*cov_posterior(:,:,k-1)*F'+Q;
     end
@@ -100,7 +99,7 @@ for k = 1:K
         v_ik = z_strength(i).x - H*x_est_prior(:,k);            % Measurement innovation
         NIS_temp = v_ik'/S*v_ik;
         if NIS_temp < gamma_g          % Within validation region
-            z_gate = [z_gate z_strength(i).x];
+            z_gate = [z_gate [z_strength(i).x; k]];
             v_i = [v_i v_ik];
             beta_i = [beta_i exp(-0.5*NIS_temp)];
             m_k = m_k + 1;
@@ -143,6 +142,7 @@ plot(z(2,:), z(1,:), 'o');
 plot(z_gate(2,:), z_gate(1,:), 'x');
 %plot(z_all(2,:), z_all(1,:), '+');     % Clutter on last step
 title('North-east position plot');
+
 figure; subplot(2,1,1); hold on;
 plot(time, x_true(2,:), 'k');
 plot(time, x_est_posterior(2,:));
@@ -153,4 +153,20 @@ plot(time, x_true(4,:), 'k');
 plot(time, x_est_posterior(4,:));
 plot(time, x_est_prior(4,:));
 title('East velocity');
-%figure; plot(time,NIS)
+
+% hold off;
+% % Plot simulation
+% figure; hold on;
+% for k = 1:K
+%     plot(x_true(3,1:k), x_true(1,1:k), 'k');
+%     plot(x_est_posterior(3,1:k), x_est_posterior(1,1:k),'r')
+%     plot(x_est_prior(3,1:k), x_est_prior(1,1:k),'b')
+%     legend('True', 'posterior', 'prior');
+%     plot(z(2,k), z(1,k), 'oy');
+%     I = find(z_gate(3,:) == k);
+%     if isempty(I) ~= 1
+%         plot(z_gate(2,I(end)), z_gate(1,I(end)), 'xg');
+%     end
+%     title('North-east position plot');
+%     %pause(0.1);
+% end

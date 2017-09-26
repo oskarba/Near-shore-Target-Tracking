@@ -1,12 +1,18 @@
 clear all;
 
+% Global constants
+global dt;
+global clut_h;
+global clut_l;
+clut_h = 0.001;
+clut_l = 0.00001;
+
 % Initialized target
 x0 = [-300; 4; -200; 5];
 cov0 = diag([10, 0.5, 10, 0.5]);
 x0_est = x0+chol(cov0)*randn(4,1);
 
 % Time for simulation
-global dt;
 dt = 1;
 t_end = 300;
 time = 1:dt:t_end;
@@ -57,7 +63,7 @@ for k = 1:K
 	else
 		x_true(:,k) = F*x_true(:,k-1);
         %if mod(K,3)==0
-            x_true(:,k) = randomize_speed(x_true(:,k));
+            x_true(:,k) = randomize_direction(x_true(:,k));
         %end
 		x_est_prior(:,k) = F*x_est_posterior(:,k-1);
 		cov_prior(:,:,k) = F*cov_posterior(:,:,k-1)*F'+Q;
@@ -68,8 +74,6 @@ for k = 1:K
 	z(:,k) = H*x_true(:,k)+noise;
     
     % Add clutter measurements and signal strength
-    clut_h = 0.001;
-    clut_l = 0.00001;
     lambda = clut_l + (clut_h - clut_l)*rand();     % Clutter density
     num_clut = int16(lambda*V);                % Number of clutter points
     z_all = [z(1,k) randi([x_lim(1) x_lim(2)],1,num_clut);
